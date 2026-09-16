@@ -66,4 +66,15 @@ describe('schema constraints', () => {
     const [t] = await db.insert(transactions).values({ direction: 'in', amountKurus: 1000, occurredAt: '2026-09-01', enteredBy: admin.id, receiptAttachmentId: receipt.id, redactionConfirmed: true }).returning();
     await expect(db.update(transactions).set({ published: true }).where(eq(transactions.id, t!.id)).catch(rethrowCause)).rejects.toThrow(/has no allocations/);
   });
+
+  it('rejects inserting a published transaction with no lines at commit', async () => {
+    const admin = await seedAdmin();
+    const receipt = await seedAttachment();
+    await expect(db.transaction(async (tx) => {
+      await tx.insert(transactions).values({
+        direction: 'in', amountKurus: 1000, occurredAt: '2026-09-01', enteredBy: admin.id,
+        receiptAttachmentId: receipt.id, redactionConfirmed: true, published: true,
+      });
+    }).catch(rethrowCause)).rejects.toThrow(/has no allocations/);
+  });
 });

@@ -10,7 +10,14 @@ async function ensureDatabase(url: string) {
   const sql = postgres(maintenance.toString(), { max: 1 });
   try {
     const rows = await sql`SELECT 1 FROM pg_database WHERE datname = ${name}`;
-    if (rows.length === 0) await sql.unsafe(`CREATE DATABASE "${name.replaceAll('"', '""')}"`);
+    if (rows.length === 0) {
+      try {
+        await sql.unsafe(`CREATE DATABASE "${name.replaceAll('"', '""')}"`);
+      } catch (e) {
+        // 42P04 duplicate_database: a parallel worktree won the race, which is fine.
+        if ((e as { code?: string }).code !== '42P04') throw e;
+      }
+    }
   } finally {
     await sql.end();
   }

@@ -15,6 +15,13 @@
       "when": 1789575544829,
       "tag": "0001_allocation_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789576519088,
+      "tag": "0002_transactions_insert_check",
+      "breakpoints": true
     }
   ]
 }
