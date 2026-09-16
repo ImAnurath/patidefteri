@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation';
 import { resolveLocale } from '@/lib/i18n/params';
 import { t } from '@/lib/i18n/messages';
 import { formatKurus } from '@/lib/money';
@@ -10,8 +11,8 @@ export default async function General(props: PageProps<'/[locale]/genel-butce'>)
   const locale = await resolveLocale(props.params);
   const g = await getGeneralCampaign();
   const s = await getCampaignSummary(g);
+  if (s.kind !== 'general') notFound();
   const history = await getCampaignHistory(g.id);
-  if (s.kind !== 'general') return null;
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg">{t(locale, 'general.title')}</h1>

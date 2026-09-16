@@ -71,7 +71,7 @@ export async function getCampaignHistory(campaignId: string, periodId?: string):
   if (periodId) conds.push(eq(allocations.periodId, periodId));
   const rows = await db.select({ a: allocations, t: transactions }).from(allocations)
     .leftJoin(transactions, eq(allocations.transactionId, transactions.id))
-    .where(and(...conds)).orderBy(desc(allocations.createdAt));
+    .where(and(...conds)).orderBy(desc(allocations.createdAt), desc(allocations.id));
   return rows.map(({ a, t }) => ({
     id: a.id, date: t?.occurredAt ?? a.createdAt.toISOString().slice(0, 10), amountKurus: a.amountKurus, reason: a.reason, note: a.note,
     transactionId: a.transactionId, receiptAttachmentId: t?.receiptAttachmentId ?? null, displayName: t?.displayName ?? null, periodId: a.periodId,

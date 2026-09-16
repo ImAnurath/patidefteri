@@ -1,14 +1,27 @@
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/** Absolute http(s), root-relative (never protocol-relative `//host`) and mailto links only. */
+const SAFE_HREF = /^(https?:\/\/|\/(?!\/)|mailto:)/i;
+
+// The href may hold balanced parentheses, so the whole `(...)` is consumed even when the link is
+// dropped for being unsafe — otherwise `[x](javascript:alert(1))` would leave a stray `)` behind.
+const LINK = /\[([^\]]+)\]\(([^()\s]*(?:\([^()\s]*\)[^()\s]*)*)\)/g;
+
+// `esc` has already turned every angle bracket in the input into an entity, so `<0>` cannot occur
+// in escaped text and is free to stand in for a rendered link. Emphasis tags never match: `\d+`.
+const PARKED = /<(\d+)>/g;
+
+const emphasis = (s: string) => s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
 function inline(s: string): string {
-  let out = esc(s);
-  // The href may hold balanced parentheses, so the whole `(...)` is consumed even when the link is
-  // dropped for being unsafe — otherwise `[x](javascript:alert(1))` would leave a stray `)` behind.
-  out = out.replace(/\[([^\]]+)\]\(([^()\s]*(?:\([^()\s]*\)[^()\s]*)*)\)/g, (_m, text: string, href: string) =>
-    /^(https?:\/\/|\/|mailto:)/i.test(href) ? `<a href="${href}" rel="noopener">${text}</a>` : text);
-  out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  out = out.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  return out;
+  // Links are rendered first and parked behind a placeholder, so the emphasis pass can never reach
+  // inside a generated href: `[a](https://x.y/*b*)` has to keep its `*b*` verbatim.
+  const parked: string[] = [];
+  const withTokens = esc(s).replace(LINK, (_m, text: string, href: string) => {
+    parked.push(SAFE_HREF.test(href) ? `<a href="${href}" rel="noopener">${emphasis(text)}</a>` : emphasis(text));
+    return `<${parked.length - 1}>`;
+  });
+  return emphasis(withTokens).replace(PARKED, (_m, i: string) => parked[Number(i)]!);
 }
 
 export function renderMarkdown(md: string): string {
