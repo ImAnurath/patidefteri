@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { adminUsers } from '@/db/schema';
 import { hashPassword } from '@/lib/auth/password';
 import { issueSession, findSessionUser, revokeSession } from '@/lib/auth/session';
-import { attemptLogin } from '@/lib/auth/login';
+import { attemptLogin, ipAttemptCount } from '@/lib/auth/login';
 import { resetDb } from './helpers';
 
 async function makeUser() {
@@ -70,5 +70,28 @@ describe('attemptLogin', () => {
     expect(await failedLoginsOf(u.id)).toBe(0);
     expect(await attemptLogin('a@b.co', 'bad', '10.0.0.6')).toEqual({ ok: false, reason: 'LOCKED' });
     expect(await failedLoginsOf(u.id)).toBe(0);
+  });
+  it('forgets an IP once its window has elapsed', async () => {
+    const ip = '10.0.0.7';
+    const before = ipAttemptCount();
+    for (let i = 0; i < 10; i++) await attemptLogin('ghost@b.co', 'bad', ip);
+    expect(ipAttemptCount()).toBe(before + 1);
+    expect(await attemptLogin('ghost@b.co', 'bad', ip)).toEqual({ ok: false, reason: 'LOCKED' });
+
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 16 * 60_000);
+    try {
+      expect(ipAttemptCount()).toBe(0); // every expired key is dropped, not just emptied
+      expect(await attemptLogin('ghost@b.co', 'bad', ip)).toEqual({ ok: false, reason: 'INVALID' });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+  it('counts concurrent failures atomically', async () => {
+    await makeUser();
+    await Promise.all([1, 2, 3, 4, 5].map((n) => attemptLogin('a@b.co', 'bad', `10.0.1.${n}`)));
+    const [after] = await db.select().from(adminUsers);
+    expect(after!.failedLogins).toBe(5);
+    expect(after!.lockedUntil).not.toBeNull();
+    expect(await attemptLogin('a@b.co', 'pw123456', '10.0.1.9')).toEqual({ ok: false, reason: 'LOCKED' });
   });
 });

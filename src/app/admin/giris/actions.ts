@@ -8,9 +8,10 @@ import { loginCookie } from '@/lib/auth/cookies';
 
 const schema = z.object({ email: z.email(), password: z.string().min(1) });
 
+/** The last `x-forwarded-for` hop is the one the nearest proxy appended; earlier values are caller-supplied. */
 async function clientIp(): Promise<string> {
   const h = await headers();
-  return h.get('x-forwarded-for')?.split(',')[0]?.trim() || h.get('x-real-ip') || 'unknown';
+  return h.get('x-forwarded-for')?.split(',').at(-1)?.trim() || h.get('x-real-ip') || 'unknown';
 }
 
 export async function loginAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
