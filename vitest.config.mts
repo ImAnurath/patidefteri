@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 import path from 'node:path';
 try { process.loadEnvFile('.env'); } catch { /* CI provides env */ }
 
-const alias = { '@': path.resolve(__dirname, 'src') };
+const alias = { '@': path.resolve(import.meta.dirname, 'src') };
 
 export default defineConfig({
   resolve: { alias },
