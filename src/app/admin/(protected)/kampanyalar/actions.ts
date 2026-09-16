@@ -1,5 +1,5 @@
 'use server';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db/client';
@@ -12,6 +12,7 @@ import { localizedSchema } from '@/lib/i18n/localized';
 import { parseTlToKurus } from '@/lib/money';
 import { isUuid } from '@/lib/uuid';
 import { acceptQuote, addPeriod, createCampaign, setCampaignStatus, updateCampaign } from '@/db/mutations/campaigns';
+import { completeCampaign } from '@/db/mutations/ledger';
 import { monthPeriodFor } from '@/lib/ledger/periods';
 import { writeAudit } from '@/lib/audit';
 
@@ -108,4 +109,14 @@ export async function acceptQuoteAction(fd: FormData): Promise<void> {
   const user = await requireAdmin();
   await acceptQuote(formId(fd, 'quoteId'), user.id);
   revalidatePath('/', 'layout');
+}
+
+export async function completeCampaignAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requireAdmin();
+  try {
+    const note = formOptional(fd, 'closingNote.tr') ? formLocalized(fd, 'closingNote') : null;
+    await completeCampaign(formId(fd, 'id'), note, user.id);
+  } catch (e) { unstable_rethrow(e); return fail(e); }
+  revalidatePath('/', 'layout');
+  return { ok: true };
 }
