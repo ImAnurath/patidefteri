@@ -7,6 +7,14 @@ node_modules/
 out/
 coverage/
 *.tsbuildinfo
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+/build
 
 # environment
 .env
@@ -17,3 +25,10 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+*.pem
+
+# vercel
+.vercel
+
+# typescript
+next-env.d.ts
