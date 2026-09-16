@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '@/db/client';
 import { eq } from 'drizzle-orm';
-import { allocations, transactions } from '@/db/schema';
+import { allocations, attachments, transactions } from '@/db/schema';
 import { canServeAttachment } from '@/lib/storage/access';
 import { openObject, storeUpload } from '@/lib/storage/upload';
 import { resetDb, seedAdmin, seedAttachment, seedGeneral } from './helpers';
@@ -42,6 +42,15 @@ describe('storeUpload', () => {
     const obj = await openObject(att.storageKey);
     expect(obj.contentType).toBe('application/pdf');
     expect(Buffer.from(await new Response(obj.body).arrayBuffer())).toEqual(bytes);
+  });
+  it('refuses bytes whose signature contradicts the declared type', async () => {
+    const disguised = new File([Buffer.from('%PDF-1.4 gizli fatura')], 'kedi.png', { type: 'image/png' });
+    await expect(storeUpload(disguised, 'photo', null)).rejects.toThrow('kabul edilmiyor');
+    expect(await db.select().from(attachments)).toHaveLength(0);
+  });
+  it('records the sniffed mime rather than the declared one', async () => {
+    const att = await storeUpload(new File([Buffer.from('%PDF-1.4 makbuz')], 'makbuz.pdf', { type: 'application/pdf' }), 'receipt', null);
+    expect(att.mime).toBe('application/pdf');
   });
   it('refuses a disallowed mime before writing anything', async () => {
     await expect(storeUpload(new File(['<b>x</b>'], 'x.html', { type: 'text/html' }), 'document', null)).rejects.toThrow('kabul edilmiyor');
