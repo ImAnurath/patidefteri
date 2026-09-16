@@ -24,11 +24,13 @@ export function splitEvenly(amountKurus: number, n: number): number[] {
 }
 
 export function pickPeriod(campaignId: string, periods: PeriodRef[], occurredAt: string, monthMention: number | null): string | null {
-  const own = periods.filter((p) => p.campaignId === campaignId);
+  const own = periods.filter((p) => p.campaignId === campaignId && p.closedAt === null);
   if (monthMention !== null) {
     const year = Number(occurredAt.slice(0, 4));
+    const occurrenceMonth = Number(occurredAt.slice(5, 7));
+    const targetYear = monthMention >= occurrenceMonth ? year : year + 1;
     const mm = String(monthMention).padStart(2, '0');
-    const hit = own.find((p) => p.periodStart === `${year}-${mm}-01`) ?? own.find((p) => p.periodStart === `${year + 1}-${mm}-01`);
+    const hit = own.find((p) => p.periodStart === `${targetYear}-${mm}-01`);
     if (hit) return hit.id;
   }
   const containing = own.find((p) => p.periodStart <= occurredAt && occurredAt <= p.periodEnd);

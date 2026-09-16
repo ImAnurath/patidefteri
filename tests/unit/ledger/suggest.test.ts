@@ -32,6 +32,19 @@ describe('pickPeriod', () => {
   it('uses the period containing the date', () => expect(pickPeriod('m', periods, '2026-09-16', null)).toBe('p9'));
   it('uses the mentioned month', () => expect(pickPeriod('m', periods, '2026-09-16', 10)).toBe('p10'));
   it('null when no period', () => expect(pickPeriod('m', periods, '2026-12-01', null)).toBeNull());
+  it('month mention earlier than the occurrence month resolves to next year', () => {
+    const janPeriods: PeriodRef[] = [
+      { id: 'jan26', campaignId: 'm', periodStart: '2026-01-01', periodEnd: '2026-01-31', targetKurus: 300000, closedAt: null },
+      { id: 'jan27', campaignId: 'm', periodStart: '2027-01-01', periodEnd: '2027-01-31', targetKurus: 300000, closedAt: null },
+    ];
+    expect(pickPeriod('m', janPeriods, '2026-09-16', 1)).toBe('jan27');
+  });
+  it('does not pick a closed period', () => {
+    const closedPeriods: PeriodRef[] = [
+      { id: 'closed', campaignId: 'm', periodStart: '2026-09-01', periodEnd: '2026-09-30', targetKurus: 300000, closedAt: new Date('2026-09-10') },
+    ];
+    expect(pickPeriod('m', closedPeriods, '2026-09-16', null)).toBeNull();
+  });
 });
 
 describe('suggestAllocations', () => {
