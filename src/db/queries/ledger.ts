@@ -59,3 +59,21 @@ export async function getTransactionWithLines(id: string): Promise<{ tx: Transac
     .orderBy(asc(allocations.createdAt), asc(allocations.id));
   return { tx, lines };
 }
+
+export interface HistoryRow {
+  id: string; date: string; amountKurus: number; reason: LedgerLine['reason']; note: string | null;
+  transactionId: string | null; receiptAttachmentId: string | null; displayName: string | null; periodId: string | null;
+}
+
+/** Publicly counted lines of a campaign with the transaction facts needed to display them. */
+export async function getCampaignHistory(campaignId: string, periodId?: string): Promise<HistoryRow[]> {
+  const conds: SQL[] = [eq(allocations.campaignId, campaignId), publiclyCounted];
+  if (periodId) conds.push(eq(allocations.periodId, periodId));
+  const rows = await db.select({ a: allocations, t: transactions }).from(allocations)
+    .leftJoin(transactions, eq(allocations.transactionId, transactions.id))
+    .where(and(...conds)).orderBy(desc(allocations.createdAt));
+  return rows.map(({ a, t }) => ({
+    id: a.id, date: t?.occurredAt ?? a.createdAt.toISOString().slice(0, 10), amountKurus: a.amountKurus, reason: a.reason, note: a.note,
+    transactionId: a.transactionId, receiptAttachmentId: t?.receiptAttachmentId ?? null, displayName: t?.displayName ?? null, periodId: a.periodId,
+  }));
+}

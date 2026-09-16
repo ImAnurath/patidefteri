@@ -11,6 +11,9 @@ const eslintConfig = defineConfig([
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
+      // Uploaded images are served through the gated /dosya route, which next/image cannot
+      // optimise without extra configuration; image optimisation is a phase-2 concern.
+      "@next/next/no-img-element": "off",
     },
   },
   // Override default ignores of eslint-config-next.
