@@ -31,6 +31,8 @@ export async function upsertAnimal(input: AnimalInput, id: string | null, actorI
 }
 
 export async function addAnimalPhoto(animalId: string, file: File, actorId: string, makeCover: boolean): Promise<void> {
+  const [animal] = await db.select({ id: animals.id }).from(animals).where(eq(animals.id, animalId)).limit(1);
+  if (!animal) throw new Error('Hayvan bulunamadı');
   const att = await storeUpload(file, 'photo', actorId);
   await db.transaction(async (tx) => {
     await tx.insert(animalPhotos).values({ animalId, attachmentId: att.id });
@@ -86,5 +88,8 @@ export async function upsertPost(input: PostInput, id: string | null, actorId: s
 
 export async function setPostCover(postId: string, file: File, actorId: string): Promise<void> {
   const att = await storeUpload(file, 'photo', actorId);
-  await db.update(posts).set({ coverAttachmentId: att.id, updatedAt: new Date() }).where(eq(posts.id, postId));
+  await db.transaction(async (tx) => {
+    await tx.update(posts).set({ coverAttachmentId: att.id, updatedAt: new Date() }).where(eq(posts.id, postId));
+    await writeAudit(tx, { actorId, action: 'post.cover', entity: 'posts', entityId: postId, diff: { attachmentId: att.id } });
+  });
 }

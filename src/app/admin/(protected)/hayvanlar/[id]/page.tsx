@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { adoptionListings, animalPhotos } from '@/db/schema';
 import { ANIMAL_STATUSES, SPECIES, ADOPTION_STATUSES } from '@/db/schema/enums';
@@ -16,7 +16,7 @@ export default async function AnimalAdmin(props: PageProps<'/admin/hayvanlar/[id
   const a = isNew ? null : await getAnimalById(id);
   if (!isNew && !a) notFound();
   const listing = a ? (await db.select().from(adoptionListings).where(eq(adoptionListings.animalId, a.id)).limit(1))[0] : undefined;
-  const photos = a ? await db.select().from(animalPhotos).where(eq(animalPhotos.animalId, a.id)) : [];
+  const photos = a ? await db.select().from(animalPhotos).where(eq(animalPhotos.animalId, a.id)).orderBy(asc(animalPhotos.sortOrder), asc(animalPhotos.id)) : [];
   return (
     <div className="flex flex-col gap-8">
       <h1 className="text-xl">{a ? a.name : 'Yeni hayvan'}</h1>
