@@ -5,14 +5,31 @@ import { verifyPassword } from './password';
 
 const MAX_FAILURES = 5;
 const LOCK_MINUTES = 15;
+const IP_MAX_ATTEMPTS = 10;
+const IP_WINDOW_MS = LOCK_MINUTES * 60_000;
 
 /** Real-looking hash, verified when the email is unknown so both branches cost the same. */
 const DUMMY_HASH =
   '$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
+// The IP window lives in this process only; acceptable for phase 1 (single instance, single admin).
+const ipAttempts = new Map<string, number[]>();
+
+/** Records an attempt from `ip` and reports whether it exceeds the sliding window. */
+function ipRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const recent = (ipAttempts.get(ip) ?? []).filter((at) => at > now - IP_WINDOW_MS);
+  const limited = recent.length >= IP_MAX_ATTEMPTS;
+  if (!limited) recent.push(now);
+  ipAttempts.set(ip, recent);
+  return limited;
+}
+
 export type LoginResult = { ok: true; userId: string } | { ok: false; reason: 'INVALID' | 'LOCKED' };
 
-export async function attemptLogin(email: string, password: string): Promise<LoginResult> {
+export async function attemptLogin(email: string, password: string, ip: string): Promise<LoginResult> {
+  if (ipRateLimited(ip)) return { ok: false, reason: 'LOCKED' };
+
   const [user] = await db
     .select()
     .from(adminUsers)
@@ -23,11 +40,14 @@ export async function attemptLogin(email: string, password: string): Promise<Log
     await verifyPassword(DUMMY_HASH, password);
     return { ok: false, reason: 'INVALID' };
   }
-  if (user.lockedUntil && user.lockedUntil > new Date()) return { ok: false, reason: 'LOCKED' };
+  const now = new Date();
+  if (user.lockedUntil && user.lockedUntil > now) return { ok: false, reason: 'LOCKED' };
+  const lockLapsed = user.lockedUntil !== null;
 
   const valid = await verifyPassword(user.passwordHash, password);
   if (!valid) {
-    const failed = user.failedLogins + 1;
+    // A lapsed lock opens a fresh window instead of re-locking on the next failure.
+    const failed = lockLapsed ? 1 : user.failedLogins + 1;
     const lockedUntil = failed >= MAX_FAILURES ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null;
     await db
       .update(adminUsers)
