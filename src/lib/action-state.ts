@@ -1,5 +1,7 @@
 import { ZodError } from 'zod';
-import { LedgerError } from '@/lib/ledger';
+// Straight from the module, not the barrel: `ActionForm` is a client component, so anything this
+// file imports is pulled into the client graph.
+import { LedgerError } from '@/lib/ledger/types';
 
 export type ActionState = { error?: string; ok?: boolean };
 export const INITIAL_ACTION_STATE: ActionState = {};

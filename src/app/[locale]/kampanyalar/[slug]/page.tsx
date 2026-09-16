@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { resolveLocale } from '@/lib/i18n/params';
 import { localePath } from '@/lib/i18n/locale';
 import { pickLocalized } from '@/lib/i18n/localized';
@@ -19,6 +19,9 @@ export default async function Campaign(props: PageProps<'/[locale]/kampanyalar/[
   const { slug } = await props.params;
   const c = await getCampaignBySlug(slug);
   if (!c || c.status === 'draft') notFound();
+  // Every General-allocated ledger row links here, but this page has no section for a general
+  // budget; /genel-butce is the page that renders its figures.
+  if (c.kind === 'general') redirect(localePath(locale, '/genel-butce'));
   const sp = await props.searchParams;
   const [s, quotes, posts] = await Promise.all([getCampaignSummary(c), listQuotesForCampaign(c.id), listPosts({ campaignId: c.id })]);
   const accepted = quotes.find((q) => q.quote.status === 'accepted');

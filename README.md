@@ -28,6 +28,11 @@ Testler: `npm run test:unit`, `npm run test:integration` (Docker gerekir), `npm 
 
 > Dikkat: `npm run test:integration`, `DATABASE_URL` ile belirtilen veritabanındaki tabloları boşaltır; yerel kullanıma dönmek için sonrasında `npm run db:seed` komutunu tekrar çalıştırın.
 
+### İşletme notları
+
+- `npm run db:seed`, dekont klasörünü (bucket) oluşturduğu için MinIO'ya erişebilmek zorundadır; `docker compose up -d` çalışmıyorsa seed başarısız olur.
+- Giriş denemelerini IP'ye göre sınırlayan sayaç her örnek (instance) içinde bellekte tutulur; birden fazla örnekle çalışırken asıl koruma hesap bazlı kilittir.
+
 ## Yapı
 
 - `src/db` — şema, migrasyonlar, sorgular, mutasyonlar
@@ -44,3 +49,8 @@ Every transaction on the donation account is public with its receipt, and every 
 See the Turkish section for setup; commands are identical.
 
 > Note: `npm run test:integration` truncates the tables of the database in `DATABASE_URL`; re-run `npm run db:seed` afterwards to get local data back.
+
+### Operational notes
+
+- `npm run db:seed` needs MinIO reachable: it creates the receipt bucket, so the seed fails if `docker compose up -d` is not running.
+- The per-IP login rate limiter is in-memory and per instance; when running more than one instance the per-account lock is the real backstop.

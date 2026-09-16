@@ -60,4 +60,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:unit
       - run: npm run test:integration
+      # Exercises the migrate + seed path itself: the integration setup has migrated the database
+      # by now, and MinIO is up for the bucket ensureBucket() creates.
+      - run: npm run db:seed
       - run: npm run build

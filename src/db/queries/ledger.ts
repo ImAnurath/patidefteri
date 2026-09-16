@@ -11,7 +11,11 @@ const toLedgerLine = (a: AllocationRow): LedgerLine => ({
   transactionId: a.transactionId, transferGroupId: a.transferGroupId, note: a.note, createdAt: a.createdAt,
 });
 
-/** Lines that count publicly: transfers, or lines of a published transaction. */
+/**
+ * Lines that count publicly: transfers, or lines of a published transaction.
+ * Any query applying this must `.leftJoin(transactions, …)`: an inner join would drop the
+ * transfer-group lines (whose `transactionId` is null) and silently understate public numbers.
+ */
 export const publiclyCounted: SQL = or(isNull(allocations.transactionId), eq(transactions.published, true))!;
 
 async function selectLines(campaignId: string, periodId: string | undefined, onlyCounted: boolean): Promise<LedgerLine[]> {

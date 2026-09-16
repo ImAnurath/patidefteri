@@ -25,13 +25,16 @@ function formOptionalId(fd: FormData, name: string): string | null {
 
 async function parseDraft(fd: FormData, actorId: string, existingReceipt: string | null): Promise<DraftInput> {
   const direction = z.enum(TX_DIRECTIONS).parse(formString(fd, 'direction'));
-  const file = formFile(fd, 'receipt');
-  const receiptAttachmentId = file ? (await storeUpload(file, direction === 'in' ? 'receipt' : 'invoice', actorId)).id : existingReceipt;
-  return {
+  // Every scalar is parsed before the upload: a typo'd amount or date must fail without having
+  // already written an S3 object and an attachments row that nothing will ever reference.
+  const scalars = {
     direction, amountKurus: formKurus(fd, 'amount'), occurredAt: formDate(fd, 'occurredAt'),
     rawNote: formOptional(fd, 'rawNote'), displayName: formOptional(fd, 'displayName'),
-    receiptAttachmentId, redactionConfirmed: fd.get('redactionConfirmed') === 'on',
+    redactionConfirmed: fd.get('redactionConfirmed') === 'on',
   };
+  const file = formFile(fd, 'receipt');
+  const receiptAttachmentId = file ? (await storeUpload(file, direction === 'in' ? 'receipt' : 'invoice', actorId)).id : existingReceipt;
+  return { ...scalars, receiptAttachmentId };
 }
 
 export async function createTransactionAction(_p: ActionState, fd: FormData): Promise<ActionState> {
