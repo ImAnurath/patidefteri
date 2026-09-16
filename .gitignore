@@ -7,6 +7,8 @@ node_modules/
 out/
 coverage/
 *.tsbuildinfo
+playwright-report/
+test-results/
 /.pnp
 .pnp.*
 .yarn/*

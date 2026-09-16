@@ -37,7 +37,6 @@ export default async function AnimalAdmin(props: PageProps<'/admin/hayvanlar/[id
       {a && (
         <section>
           <h2 className="font-bold">Fotoğraflar</h2>
-          {/* eslint-disable-next-line @next/next/no-img-element -- /dosya streams private objects from S3; next/image cannot optimize them. */}
           <div className="flex gap-2 flex-wrap">{photos.map((p) => <img key={p.id} src={`/dosya/${p.attachmentId}`} alt="" className="h-24 border" />)}</div>
           <ActionForm action={addPhotoAction} submitLabel="Yükle">
             <input type="hidden" name="animalId" value={a.id} />

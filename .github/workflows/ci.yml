@@ -1,0 +1,63 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: patidefteri
+          POSTGRES_PASSWORD: patidefteri
+          POSTGRES_DB: patidefteri
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U patidefteri"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://patidefteri:patidefteri@localhost:5432/patidefteri
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: ci
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      SESSION_SECRET: ci-session-secret-ci-session-secret-ci
+      ADMIN_EMAIL: ci@example.com
+      ADMIN_PASSWORD: ci
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      DONATION_IBAN: TR00
+      DONATION_ACCOUNT_NAME: CI
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # The storage integration tests upload objects and read them back, so S3 has to be live.
+      # MinIO cannot be a `services:` container: its image needs the `server /data` command, and
+      # service containers cannot supply one. Same image as docker-compose.yml, so CI matches dev.
+      # The bucket itself is created on demand by ensureBucket().
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            quay.io/minio/minio:latest server /data
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:9000/minio/health/live; then exit 0; fi
+            sleep 2
+          done
+          docker logs minio
+          echo "MinIO did not become ready" >&2
+          exit 1
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run test:integration
+      - run: npm run build
