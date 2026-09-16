@@ -26,6 +26,8 @@ npm run dev                 # http://localhost:3000, yönetim: /admin
 
 Testler: `npm run test:unit`, `npm run test:integration` (Docker gerekir), `npm run e2e` (uygulama + seed gerekir).
 
+> Dikkat: `npm run test:integration`, `DATABASE_URL` ile belirtilen veritabanındaki tabloları boşaltır; yerel kullanıma dönmek için sonrasında `npm run db:seed` komutunu tekrar çalıştırın.
+
 ## Yapı
 
 - `src/db` — şema, migrasyonlar, sorgular, mutasyonlar
@@ -40,3 +42,5 @@ Testler: `npm run test:unit`, `npm run test:integration` (Docker gerekir), `npm 
 A transparency-first donation and adoption site for street animals in Ordu, Turkey.
 Every transaction on the donation account is public with its receipt, and every number on the site is a sum over those rows.
 See the Turkish section for setup; commands are identical.
+
+> Note: `npm run test:integration` truncates the tables of the database in `DATABASE_URL`; re-run `npm run db:seed` afterwards to get local data back.

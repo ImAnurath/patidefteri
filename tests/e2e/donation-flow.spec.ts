@@ -1,18 +1,30 @@
 import { test, expect, type Page } from '@playwright/test';
 import path from 'node:path';
+import { formatKurus, parseTlToKurus } from '@/lib/money';
 
 const email = process.env.ADMIN_EMAIL!;
 const password = process.env.ADMIN_PASSWORD!;
 
 /** Title of the seeded one-off campaign the note keyword `kori` matches. */
 const KORI_CAMPAIGN = "Kori'nin ameliyatı";
+const KORI_PATH = '/kampanyalar/kori-ameliyat';
+const DONATION_KURUS = 25_000; // 250,00 TL
 
 /** Clicks the submit button of the one form that contains `marker`. */
 function submitFormWith(page: Page, marker: string): Promise<void> {
   return page.locator('form').filter({ has: page.locator(marker) }).locator('button[type=submit]').click();
 }
 
-test('admin enters a Kori donation and it shows on the public ledger and campaign page', async ({ page }) => {
+/** Reads the campaign's raised figure back into kurus, so the assertion is on a number. */
+async function readRaisedKurus(page: Page): Promise<number> {
+  const text = await page.getByTestId('raised').innerText();
+  return parseTlToKurus(text.replace(/[\s₺]/g, ''));
+}
+
+test('admin enters a Kori donation and it shows on the public ledger and campaign page', async ({ page, request }) => {
+  await page.goto(KORI_PATH);
+  const raisedBefore = await readRaisedKurus(page);
+
   await page.goto('/admin');
   await expect(page).toHaveURL(/\/admin\/giris/);
   await page.fill('input[name=email]', email);
@@ -47,12 +59,24 @@ test('admin enters a Kori donation and it shows on the public ledger and campaig
   await submitFormWith(page, 'input[name=lineCount]');
   await expect(page.getByText('Kaydedildi.')).toBeVisible();
 
+  // the ledger row carries the masked name and a link to the now-public receipt
   await page.goto('/defter');
   await expect(page.getByText(donor).first()).toBeVisible();
   await expect(page.getByText(rawNote)).toHaveCount(0);
-  await page.goto('/kampanyalar/kori-ameliyat');
+  const receiptHref = await page.locator('tr').filter({ hasText: donor }).locator('a[href^="/dosya/"]').getAttribute('href');
+  expect(receiptHref).toMatch(/^\/dosya\/[0-9a-f-]{36}$/);
+  // `request` carries no session cookie, so this proves the gated route serves a published,
+  // redaction-confirmed receipt to the public and not just to the signed-in admin.
+  const receipt = await request.get(receiptHref!);
+  expect(receipt.status()).toBe(200);
+  expect(receipt.headers()['content-type']).toContain('application/pdf');
+
+  // the campaign bar reflects the donation
+  await page.goto(KORI_PATH);
+  await expect(page.getByTestId('raised')).toHaveText(formatKurus(raisedBefore + DONATION_KURUS, 'tr'));
   await expect(page.getByText(donor).first()).toBeVisible();
   await expect(page.getByText(rawNote)).toHaveCount(0);
-  await page.goto('/en/kampanyalar/kori-ameliyat');
+  await page.goto(`/en${KORI_PATH}`);
   await expect(page.getByText('Raised')).toBeVisible();
+  await expect(page.getByTestId('raised')).toHaveText(formatKurus(raisedBefore + DONATION_KURUS, 'en'));
 });

@@ -34,7 +34,7 @@ export default async function Campaign(props: PageProps<'/[locale]/kampanyalar/[
         <section className="flex flex-col gap-2">
           <ProgressBar ratio={s.summary.progress} label={`${formatKurus(s.summary.raised, locale)} / ${c.targetKurus ? formatKurus(c.targetKurus, locale) : '—'}`} />
           <dl className="grid grid-cols-2 gap-1 text-sm max-w-md">
-            <dt>{t(locale, 'campaign.raised')}</dt><dd>{formatKurus(s.summary.raised, locale)}</dd>
+            <dt>{t(locale, 'campaign.raised')}</dt><dd data-testid="raised">{formatKurus(s.summary.raised, locale)}</dd>
             {s.summary.fromGeneral > 0 && <><dt>{t(locale, 'campaign.fromGeneral')}</dt><dd>{formatKurus(s.summary.fromGeneral, locale)}</dd></>}
             <dt>{t(locale, 'campaign.spent')}</dt><dd>{formatKurus(s.summary.spent, locale)}</dd>
             {s.summary.movedOut > 0 && <><dt>{t(locale, 'campaign.movedToGeneral')}</dt><dd>{formatKurus(s.summary.movedOut, locale)}</dd></>}
