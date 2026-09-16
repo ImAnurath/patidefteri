@@ -30,6 +30,19 @@ async function campaignRefs(tx: Tx): Promise<Map<string, CampaignRef>> {
   return new Map((await tx.select().from(campaigns)).map((c) => [c.id, toCampaignRef(c)] as [string, CampaignRef]));
 }
 
+/**
+ * A line naming a period must name an open period of its own campaign. A closed period has already been
+ * carried forward, so money written into it afterwards is stranded: no summary would ever report it.
+ */
+async function assertPeriodsUsable(tx: Tx, lines: readonly AllocationLine[]): Promise<void> {
+  for (const l of lines) {
+    if (!l.periodId) continue;
+    const [p] = await tx.select().from(campaignPeriods).where(eq(campaignPeriods.id, l.periodId)).limit(1);
+    if (!p || p.campaignId !== l.campaignId) throw new LedgerError('PERIOD_REQUIRED', 'Dönem kampanyaya ait değil');
+    if (p.closedAt) throw new LedgerError('PERIOD_CLOSED', `Dönem kapalı: ${p.periodStart}`);
+  }
+}
+
 async function refreshOneOffStatus(tx: Tx, campaignId: string): Promise<void> {
   const [c] = await tx.select().from(campaigns).where(eq(campaigns.id, campaignId)).limit(1);
   if (!c || c.kind !== 'one_off') return;
@@ -50,9 +63,12 @@ export async function updateTransaction(id: string, input: DraftInput, actorId: 
   await db.transaction(async (tx) => {
     const [before] = await tx.select().from(transactions).where(eq(transactions.id, id)).limit(1);
     if (!before) throw new Error('İşlem bulunamadı');
+    const lines = await tx.select().from(allocations).where(eq(allocations.transactionId, id));
+    // An unallocated draft has no lines yet and stays freely editable; once allocated, the edited
+    // amount must still match its lines, so the admin sees a ledger error instead of raw trigger text.
+    if (lines.length > 0) validateTransactionLines(input.direction, input.amountKurus, lines, await campaignRefs(tx));
     const [after] = await tx.update(transactions).set({ ...input, updatedAt: new Date() }).where(eq(transactions.id, id)).returning();
     await writeAudit(tx, { actorId, action: 'transaction.update', entity: 'transactions', entityId: id, diff: { before, after } });
-    const lines = await tx.select().from(allocations).where(eq(allocations.transactionId, id));
     for (const cid of new Set(lines.map((l) => l.campaignId))) await refreshOneOffStatus(tx, cid);
   });
 }
@@ -87,6 +103,7 @@ export async function saveAllocations(txId: string, lines: AllocationLine[], pub
     if (publish && (!t.receiptAttachmentId || !t.redactionConfirmed)) throw new Error('Yayınlamak için dekont yüklenmiş ve kişisel verilerin gizlendiği onaylanmış olmalı.');
     const refs = await campaignRefs(tx);
     validateTransactionLines(t.direction, t.amountKurus, lines, refs);
+    await assertPeriodsUsable(tx, lines);
     const before = await tx.select().from(allocations).where(eq(allocations.transactionId, txId));
     await tx.delete(allocations).where(eq(allocations.transactionId, txId));
     await tx.insert(allocations).values(lines.map((l) => ({ ...l, transactionId: txId, createdBy: actorId })));
@@ -108,12 +125,7 @@ export async function unpublishTransaction(txId: string, actorId: string): Promi
 export async function recordTransfer(lines: AllocationLine[], note: string | null, actorId: string): Promise<string> {
   return db.transaction(async (tx) => {
     validateTransferLines(lines, await campaignRefs(tx));
-    for (const l of lines) {
-      if (l.periodId) {
-        const [p] = await tx.select().from(campaignPeriods).where(eq(campaignPeriods.id, l.periodId)).limit(1);
-        if (!p || p.campaignId !== l.campaignId) throw new LedgerError('PERIOD_REQUIRED', 'Dönem kampanyaya ait değil');
-      }
-    }
+    await assertPeriodsUsable(tx, lines);
     const transferGroupId = crypto.randomUUID();
     await tx.insert(allocations).values(lines.map((l) => ({ ...l, transferGroupId, note, createdBy: actorId })));
     await writeAudit(tx, { actorId, action: 'transfer.create', entity: 'allocations', entityId: transferGroupId, diff: { lines, note } });
@@ -155,7 +167,11 @@ export async function completeCampaign(campaignId: string, closingNote: Localize
       validateTransferLines(plan.suggestedTransfer, await campaignRefs(tx));
       const transferGroupId = crypto.randomUUID();
       await tx.insert(allocations).values(plan.suggestedTransfer.map((l) => ({ ...l, transferGroupId, createdBy: actorId, note: 'Kampanya kapanışı' })));
-      plan = planCompletion({ campaign: toCampaignRef(c), lines: await countedLines(tx, c.id), generalId: general.id, generalBalance });
+      // The transfer just moved money in or out of the general budget, so re-read its balance too.
+      plan = planCompletion({
+        campaign: toCampaignRef(c), lines: await countedLines(tx, c.id), generalId: general.id,
+        generalBalance: summarizeGeneral(await countedLines(tx, general.id)).balance,
+      });
     }
     if (!plan.canComplete) throw new Error('Kampanya kapatılamadı: bakiye sıfır değil.');
     await tx.update(campaigns).set({ status: 'completed', closedAt: new Date(), closingNote, updatedAt: new Date() }).where(eq(campaigns.id, campaignId));

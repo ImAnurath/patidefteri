@@ -16,7 +16,8 @@ export default async function TransactionAdmin(props: PageProps<'/admin/islemler
   const { tx, lines } = data;
   const campaigns = await listCampaigns({ statuses: ['active', 'funded'] });
   const periodsByCampaign: Record<string, { id: string; label: string }[]> = {};
-  for (const c of campaigns.filter((c) => c.kind === 'recurring')) periodsByCampaign[c.id] = (await listPeriods(c.id)).map((p) => ({ id: p.id, label: p.periodStart.slice(0, 7) }));
+  // Open periods only: a closed period is already carried forward, and saving into one is rejected.
+  for (const c of campaigns.filter((c) => c.kind === 'recurring')) periodsByCampaign[c.id] = (await listPeriods(c.id)).filter((p) => p.closedAt === null).map((p) => ({ id: p.id, label: p.periodStart.slice(0, 7) }));
   const initial = lines.length > 0
     ? lines.map((l) => ({ campaignId: l.campaignId, periodId: l.periodId, amountKurus: l.amountKurus, reason: l.reason }))
     : (await suggestForTransaction(tx.id)).lines;

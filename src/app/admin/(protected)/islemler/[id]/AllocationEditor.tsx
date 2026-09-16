@@ -13,6 +13,7 @@ export function AllocationEditor({ initial, direction, totalKurus, campaigns, pe
   const [rows, setRows] = useState(initial.map((l) => ({ ...l, amount: tl(l.amountKurus) })));
   const sum = rows.reduce((a, r) => a + kurusOrZero(r.amount), 0);
   const reasons: AllocationLine['reason'][] = direction === 'in' ? ['note_match', 'manual', 'correction'] : ['expense'];
+  const first = campaigns[0]; // undefined when no campaign is open, so a new row has nothing to point at
   return (
     <div className="flex flex-col gap-2">
       <input type="hidden" name="lineCount" value={rows.length} />
@@ -34,7 +35,7 @@ export function AllocationEditor({ initial, direction, totalKurus, campaigns, pe
           <button type="button" onClick={() => setRows(rows.filter((_, j) => j !== i))} className="border px-1">sil</button>
         </div>
       ))}
-      <button type="button" onClick={() => setRows([...rows, { campaignId: campaigns[0]!.id, periodId: null, amountKurus: 0, reason: reasons[0]!, amount: '0,00' }])} className="border px-2 self-start">satır ekle</button>
+      <button type="button" disabled={!first} onClick={() => first && setRows([...rows, { campaignId: first.id, periodId: null, amountKurus: 0, reason: reasons[0]!, amount: '0,00' }])} className="border px-2 self-start disabled:opacity-50">satır ekle</button>
       <p className={sum === totalKurus ? 'text-green-700' : 'text-red-700'}>Toplam {tl(sum)} / {tl(totalKurus)} TL</p>
     </div>
   );

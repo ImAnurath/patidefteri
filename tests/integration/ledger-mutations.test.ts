@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { allocations, campaigns, campaignPeriods } from '@/db/schema';
+import { allocations, campaigns, campaignPeriods, transactions } from '@/db/schema';
 import { createDraftTransaction, suggestForTransaction, saveAllocations, recordTransfer, closePeriod, completeCampaign, updateTransaction } from '@/db/mutations/ledger';
 import { getCampaignSummary, getGeneralBalance } from '@/db/queries/summaries';
 import { makeTransfer } from '@/lib/ledger/transfers';
@@ -91,6 +91,48 @@ describe('ledger mutations', () => {
     const r = await seedAttachment();
     const t = await createDraftTransaction({ ...draft(1000, null), receiptAttachmentId: r.id, redactionConfirmed: true }, admin.id);
     await saveAllocations(t.id, [{ campaignId: general.id, periodId: null, amountKurus: 1000, reason: 'manual' }], true, admin.id);
-    await expect(updateTransaction(t.id, { ...draft(900, null), receiptAttachmentId: r.id, redactionConfirmed: true }, admin.id)).rejects.toThrow(/does not match/);
+    await expect(db.transaction(async (tx) => {
+      await tx.update(transactions).set({ amountKurus: 900 }).where(eq(transactions.id, t.id));
+    })).rejects.toThrow(/does not match/);
+  });
+
+  it('rejects allocation lines into a closed period', async () => {
+    const { admin, mama, sep } = await setup();
+    await closePeriod(sep.id, admin.id);
+    const r = await seedAttachment();
+    const t = await createDraftTransaction({ ...draft(10000, 'mama'), receiptAttachmentId: r.id, redactionConfirmed: true }, admin.id);
+    await expect(saveAllocations(t.id, [{ campaignId: mama.id, periodId: sep.id, amountKurus: 10000, reason: 'note_match' }], true, admin.id))
+      .rejects.toMatchObject({ name: 'LedgerError', code: 'PERIOD_CLOSED' });
+    expect(await db.select().from(allocations).where(eq(allocations.transactionId, t.id))).toHaveLength(0);
+  });
+
+  it('rejects a transfer into a closed period', async () => {
+    const { admin, general, mama, sep } = await setup();
+    await closePeriod(sep.id, admin.id);
+    const lines = makeTransfer({ fromCampaignId: general.id, fromPeriodId: null, toCampaignId: mama.id, toPeriodId: sep.id, amountKurus: 50000, reason: 'top_up_from_general' });
+    await expect(recordTransfer(lines, null, admin.id)).rejects.toMatchObject({ name: 'LedgerError', code: 'PERIOD_CLOSED' });
+  });
+
+  it('rejects a line whose period belongs to another campaign', async () => {
+    const { admin, mama } = await setup();
+    const [kum] = await db.insert(campaigns).values({ slug: 'kum', kind: 'recurring', status: 'active', keywords: ['kum'], title: { tr: 'Kum' }, description: { tr: 'x' } }).returning();
+    const [kumSep] = await db.insert(campaignPeriods).values({ campaignId: kum!.id, periodStart: '2026-09-01', periodEnd: '2026-09-30', targetKurus: 100000 }).returning();
+    const r = await seedAttachment();
+    const t = await createDraftTransaction({ ...draft(10000, 'mama'), receiptAttachmentId: r.id, redactionConfirmed: true }, admin.id);
+    await expect(saveAllocations(t.id, [{ campaignId: mama.id, periodId: kumSep!.id, amountKurus: 10000, reason: 'note_match' }], true, admin.id))
+      .rejects.toMatchObject({ name: 'LedgerError', code: 'PERIOD_REQUIRED' });
+  });
+
+  it('re-validates lines on edit but leaves an unallocated draft editable', async () => {
+    const { admin, general } = await setup();
+    const r = await seedAttachment();
+    const unallocated = await createDraftTransaction(draft(1000, null), admin.id);
+    await updateTransaction(unallocated.id, { ...draft(900, null), receiptAttachmentId: r.id, redactionConfirmed: true }, admin.id);
+    expect((await db.select().from(transactions).where(eq(transactions.id, unallocated.id)))[0]!.amountKurus).toBe(900);
+    const t = await createDraftTransaction({ ...draft(1000, null), receiptAttachmentId: r.id, redactionConfirmed: true }, admin.id);
+    await saveAllocations(t.id, [{ campaignId: general.id, periodId: null, amountKurus: 1000, reason: 'manual' }], true, admin.id);
+    await expect(updateTransaction(t.id, { ...draft(900, null), receiptAttachmentId: r.id, redactionConfirmed: true }, admin.id))
+      .rejects.toMatchObject({ name: 'LedgerError', code: 'LINES_SUM_MISMATCH' });
+    expect((await db.select().from(transactions).where(eq(transactions.id, t.id)))[0]!.amountKurus).toBe(1000);
   });
 });
