@@ -144,6 +144,10 @@ export async function closePeriod(periodId: string, actorId: string): Promise<{ 
     const lines = planCarryForward(toPeriodRef(p), next.id, balance);
     if (lines) {
       validateTransferLines(lines, await campaignRefs(tx));
+      // `ensurePeriod` hands back an existing next period even when it is already closed, so closing
+      // months out of order would carry into a closed month. Both endpoints are still open in the
+      // normal flow, because this period's `closedAt` is only set below.
+      await assertPeriodsUsable(tx, lines);
       const transferGroupId = crypto.randomUUID();
       await tx.insert(allocations).values(lines.map((l) => ({ ...l, transferGroupId, createdBy: actorId, note: 'Dönem kapanışı devri' })));
     }

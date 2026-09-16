@@ -4,7 +4,9 @@ import { parseTlToKurus } from '@/lib/money';
 import type { AllocationLine } from '@/lib/ledger/types';
 
 type Campaign = { id: string; title: string; kind: 'one_off' | 'recurring' | 'general' };
-type Props = { initial: AllocationLine[]; direction: 'in' | 'out'; totalKurus: number; campaigns: Campaign[]; periodsByCampaign: Record<string, { id: string; label: string }[]> };
+/** A closed period an existing line still points at arrives disabled: it stays selected but cannot be picked. */
+type PeriodOption = { id: string; label: string; disabled?: boolean };
+type Props = { initial: AllocationLine[]; direction: 'in' | 'out'; totalKurus: number; campaigns: Campaign[]; periodsByCampaign: Record<string, PeriodOption[]> };
 const tl = (k: number) => (Math.abs(k) / 100).toFixed(2).replace('.', ',');
 /** The live total must survive half-typed amounts, so an unparseable field counts as zero. */
 const kurusOrZero = (amount: string) => { try { return parseTlToKurus(amount); } catch { return 0; } };
@@ -25,7 +27,7 @@ export function AllocationEditor({ initial, direction, totalKurus, campaigns, pe
           {campaigns.find((c) => c.id === r.campaignId)?.kind === 'recurring' && (
             <select name={`line.${i}.periodId`} value={r.periodId ?? ''} onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, periodId: e.target.value || null } : x))} className="border">
               <option value="">dönem seç</option>
-              {(periodsByCampaign[r.campaignId] ?? []).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              {(periodsByCampaign[r.campaignId] ?? []).map((p) => <option key={p.id} value={p.id} disabled={p.disabled}>{p.label}</option>)}
             </select>
           )}
           <input name={`line.${i}.amount`} value={r.amount} onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))} className="border px-2 w-32" />

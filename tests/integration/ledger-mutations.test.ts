@@ -123,6 +123,18 @@ describe('ledger mutations', () => {
       .rejects.toMatchObject({ name: 'LedgerError', code: 'PERIOD_REQUIRED' });
   });
 
+  it('refuses to carry forward into a period that was closed out of order', async () => {
+    const { admin, mama, sep } = await setup();
+    const [oct] = await db.insert(campaignPeriods).values({ campaignId: mama.id, periodStart: '2026-10-01', periodEnd: '2026-10-31', targetKurus: 300000 }).returning();
+    const r = await seedAttachment();
+    const t = await createDraftTransaction({ ...draft(330000, 'mama'), receiptAttachmentId: r.id, redactionConfirmed: true }, admin.id);
+    await saveAllocations(t.id, [{ campaignId: mama.id, periodId: sep.id, amountKurus: 330000, reason: 'note_match' }], true, admin.id);
+    expect(await closePeriod(oct!.id, admin.id)).toEqual({ carried: 0 });
+    await expect(closePeriod(sep.id, admin.id)).rejects.toMatchObject({ name: 'LedgerError', code: 'PERIOD_CLOSED' });
+    expect(await db.select().from(allocations).where(eq(allocations.reason, 'carry_forward'))).toHaveLength(0);
+    expect((await db.select().from(campaignPeriods).where(eq(campaignPeriods.id, sep.id)))[0]!.closedAt).toBeNull();
+  });
+
   it('re-validates lines on edit but leaves an unallocated draft editable', async () => {
     const { admin, general } = await setup();
     const r = await seedAttachment();
